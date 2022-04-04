@@ -1,54 +1,88 @@
+// 로그인 시스템 대신 임시 방편
+let username = prompt("아이디를 입력하세요");
+let roomNum = prompt("채팅방 번호를 입력하세요");
+
+document.querySelector("#username").innerHTML = username;
+
+// SSE 연결하기
 const eventSource = new EventSource(
-  "http://localhost:8080/sender/donghoon/receiver/bomdeul"
+  `http://localhost:8080/chat/roomNum/${roomNum}`
 );
 eventSource.onmessage = (event) => {
   const data = JSON.parse(event.data);
-  initMessage(data);
+  if (data.sender === username) {
+    // 로그인한 유저가 보낸 메세지
+    // 파란 박스 (오른쪽)
+    initMyMessage(data);
+  } else {
+    // 회색 박스 (왼쪽)
+    initYourMessage(data);
+  }
 };
 
-function getSendMsgBox(msg, time) {
+// 파란 박스 만들기
+function getSendMsgBox(data) {
+  let td = data.createdAt.substring(5, 10);
+  let tm = data.createdAt.substring(11, 16);
+  convertedTime = tm + " | " + td;
+
   return `<div class="sent_msg">
-    <p>${msg}</p>
-    <span class="time_date"> ${time} </span>
+    <p>${data.msg}</p>
+    <span class="time_date"> ${convertedTime} / <b>${data.sender}</b> </span>
   </div>`;
 }
 
-function initMessage(data) {
-  let chatBox = document.querySelector("#chat-box");
-  let msgInput = document.querySelector("#chat-outgoing-msg");
+// 흰색 박스 만들기
+function getReceiveMsgBox(data) {
+  let td = data.createdAt.substring(5, 10);
+  let tm = data.createdAt.substring(11, 16);
+  convertedTime = tm + " | " + td;
 
-  let chatOutgoingBox = document.createElement("div");
-  chatOutgoingBox.className = "outgoing_msg";
-  chatOutgoingBox.innerHTML = getSendMsgBox(data.msg, data.createdAt);
-  chatBox.append(chatOutgoingBox);
-
-  msgInput.value = "";
+  return `<div class="received_withd_msg">
+    <p>${data.msg}</p>
+    <span class="time_date"> ${convertedTime} / <b>${data.sender}</b> </span>
+  </div>`;
 }
 
-async function addMessage() {
+// 최초 초기화될 때 1번 방에 3건이 있으면 3건을 다 가져온다
+// addMessage() 함수 호출 시에 DB에 insert되고, 그 데이터가 자동으로 흘러들어온다 (SSE)
+// 파란 박스 초기화하기
+function initMyMessage(data) {
   let chatBox = document.querySelector("#chat-box");
+
+  let sendBox = document.createElement("div");
+  sendBox.className = "outgoing_msg";
+
+  sendBox.innerHTML = getSendMsgBox(data);
+  chatBox.append(sendBox);
+
+  document.documentElement.scrollTop = document.body.scrollHeight;
+}
+
+// 회색 박스 초기화하기
+function initYourMessage(data) {
+  let chatBox = document.querySelector("#chat-box");
+
+  let receivedBox = document.createElement("div");
+  receivedBox.className = "received_msg";
+
+  receivedBox.innerHTML = getReceiveMsgBox(data);
+  chatBox.append(receivedBox);
+
+  document.documentElement.scrollTop = document.body.scrollHeight;
+}
+
+// ajax 채팅 메세지 전송
+async function addMessage() {
   let msgInput = document.querySelector("#chat-outgoing-msg");
 
-  let chatOutgoingBox = document.createElement("div");
-  chatOutgoingBox.className = "outgoing_msg";
-
-  let date = new Date();
-  let now =
-    date.getHours() +
-    ":" +
-    date.getMinutes() +
-    " | " +
-    date.getMonth() +
-    "/" +
-    date.getDate();
-
   let chat = {
-    sender: "donghoon",
-    receiver: "bomdeul",
+    sender: username,
+    roomNum: roomNum,
     msg: msgInput.value,
   };
 
-  let response = await fetch("http://localhost:8080/chat", {
+  fetch("http://localhost:8080/chat", {
     method: "post",
     body: JSON.stringify(chat),
     headers: {
@@ -56,18 +90,15 @@ async function addMessage() {
     },
   });
 
-  let parseResponse = await response.json();
-  console.log(parseResponse);
-
-  chatOutgoingBox.innerHTML = getSendMsgBox(msgInput.value, now);
-  chatBox.append(chatOutgoingBox);
-
   msgInput.value = "";
 }
 
+// 버튼 클릭시 메세지 전송
 document.querySelector("#chat-send").addEventListener("click", () => {
   addMessage();
 });
+
+// 엔터 입력시 메세지 전송
 document
   .querySelector("#chat-outgoing-msg")
   .addEventListener("keydown", (e) => {
